@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Modern 3D Fan — Three.js</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; }
+  #app { position: fixed; inset: 0; }
+  canvas { display: block; }
+  .panel {
+    position: fixed; top: 16px; left: 16px;
+    background: rgba(15,23,42,.78); backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,.12); border-radius: 14px;
+    color: #e2e8f0; padding: 14px 16px; min-width: 250px; max-width: 320px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.35);
+    user-select: none;
+  }
+  .panel h1 { font-size: 15px; font-weight: 700; letter-spacing: .02em; }
+  .panel p { font-size: 12px; color: #94a3b8; margin-top: 4px; line-height: 1.45; }
+  .status { display: flex; gap: 8px; margin-top: 10px; }
+  .chip {
+    flex: 1; font-size: 11px; font-weight: 600; text-align: center;
+    padding: 6px 4px; border-radius: 8px; background: rgba(255,255,255,.07);
+    border: 1px solid rgba(255,255,255,.1);
+  }
+  .chip b { display: block; font-size: 13px; margin-top: 2px; }
+  .chip.on b { color: #4ade80; }
+  .chip.off b { color: #f87171; }
+  .btns { display: flex; gap: 8px; margin-top: 10px; }
+  .btns button {
+    flex: 1; border: 1px solid rgba(255,255,255,.14); cursor: pointer;
+    background: rgba(255,255,255,.08); color: #fff;
+    font-size: 12px; font-weight: 600; padding: 8px 0; border-radius: 8px;
+    transition: background .15s, transform .05s;
+  }
+  .btns button:hover { background: rgba(255,255,255,.16); }
+  .btns button:active { transform: scale(.97); }
+  .hint {
+    position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%);
+    font-size: 12px; color: #cbd5e1; background: rgba(15,23,42,.7);
+    border: 1px solid rgba(255,255,255,.1); padding: 8px 14px; border-radius: 999px;
+    white-space: nowrap; backdrop-filter: blur(8px);
+  }
+  #tooltip {
+    position: fixed; pointer-events: none; display: none;
+    background: #000; color: #fff; font-size: 12px; font-weight: 600;
+    padding: 4px 8px; border-radius: 6px; transform: translate(12px, 12px);
+    z-index: 10;
+  }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="app"></div>
+<div class="panel">
+  <h1>Modern Fan — Three.js</h1>
+  <p>Drag to orbit &bull; scroll to zoom &bull; click the 3 buttons on the motor housing (raycast).</p>
+  <div class="status">
+    <div class="chip off" id="chip-power">POWER<b id="v-power">OFF</b></div>
+    <div class="chip" id="chip-speed">SPEED<b id="v-speed">1</b></div>
+    <div class="chip" id="chip-osc">OSCILLATE<b id="v-osc">OFF</b></div>
+  </div>
+  <div class="btns">
+    <button id="b-power">⏻ Power</button>
+    <button id="b-speed">Speed</button>
+    <button id="b-osc">Oscillate</button>
+  </div>
+</div>
+<div class="hint">3D buttons: <span style="color:#f87171">● power</span> &nbsp;<span style="color:#60a5fa">● speed</span> &nbsp;<span style="color:#4ade80">● oscillate</span></div>
+<div id="tooltip"></div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ---------- renderer / scene / camera ----------
+const container = document.getElementById('app');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0f172a);
+scene.fog = new THREE.Fog(0x0f172a, 12, 26);
+
+const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 100);
+camera.position.set(3.6, 2.9, 5.2);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+container.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 1.7, 0);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.minDistance = 2.2;
+controls.maxDistance = 12;
+controls.maxPolarAngle = Math.PI * 0.495;
+
+// ---------- lights ----------
+scene.add(new THREE.HemisphereLight(0xdbeafe, 0x1e293b, 0.9));
+
+const key = new THREE.DirectionalLight(0xffffff, 2.2);
+key.position.set(4, 7, 4);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.camera.left = -5; key.shadow.camera.right = 5;
+key.shadow.camera.top = 6; key.shadow.camera.bottom = -2;
+key.shadow.camera.far = 20;
+key.shadow.bias = -0.0004;
+scene.add(key);
+
+const rim = new THREE.DirectionalLight(0x93c5fd, 0.9);
+rim.position.set(-5, 4, -4);
+scene.add(rim);
+
+const fill = new THREE.PointLight(0xffffff, 8, 12, 2);
+fill.position.set(-1.5, 3.2, 3.0);
+scene.add(fill);
+
+// ---------- ground ----------
+const ground = new THREE.Mesh(
+  new THREE.CircleGeometry(9, 64),
+  new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.95, metalness: 0 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+const grid = new THREE.GridHelper(18, 36, 0x334155, 0x1e293b);
+grid.position.y = 0.001;
+scene.add(grid);
+
+// ---------- materials ----------
+const matBase   = new THREE.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.35, metalness: 0.55 });
+const matDark   = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.5, metalness: 0.4 });
+const matPole   = new THREE.MeshStandardMaterial({ color: 0xcbd5e1, roughness: 0.18, metalness: 1.0 });
+const matHousing= new THREE.MeshStandardMaterial({ color: 0x374151, roughness: 0.3, metalness: 0.7 });
+const matBlade  = new THREE.MeshStandardMaterial({ color: 0x9fb8d8, roughness: 0.28, metalness: 0.15, side: THREE.DoubleSide, transparent: true, opacity: 0.96 });
+const matChrome = new THREE.MeshStandardMaterial({ color: 0xe5e7eb, roughness: 0.12, metalness: 1.0 });
+
+// ---------- fan build ----------
+const fan = new THREE.Group();
+scene.add(fan);
+const shadowed = (m) => { m.castShadow = true; m.receiveShadow = true; return m; };
+
+// Base: rounded dark base (cylinder + torus trim + dome)
+const baseGroup = new THREE.Group();
+fan.add(baseGroup);
+const baseMain = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.85, 1.05, 0.32, 48), matBase));
+baseMain.position.y = 0.16;
+baseGroup.add(baseMain);
+const baseTrim = shadowed(new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.045, 16, 64), matPole));
+baseTrim.rotation.x = Math.PI / 2;
+baseTrim.position.y = 0.06;
+baseGroup.add(baseTrim);
+const baseDome = shadowed(new THREE.Mesh(new THREE.SphereGeometry(0.85, 48, 16, 0, Math.PI * 2, 0, Math.PI / 2), matBase));
+baseDome.scale.y = 0.28;
+baseDome.position.y = 0.32;
+baseGroup.add(baseDome);
+// control ring light on base
+const baseRingMat = new THREE.MeshStandardMaterial({ color: 0x0ea5e9, emissive: 0xef4444, emissiveIntensity: 1.2, roughness: 0.4 });
+const baseRing = new THREE.Mesh(new THREE.TorusGeometry(0.6, 0.015, 8, 64), baseRingMat);
+baseRing.rotation.x = Math.PI / 2;
+baseRing.position.y = 0.335;
+baseGroup.add(baseRing);
+
+// Pole: slim metallic
+const pole = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.105, 2.2, 32), matPole));
+pole.position.y = 0.32 + 1.1;
+fan.add(pole);
+const collar = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 0.12, 32), matDark));
+collar.position.y = 0.55;
+fan.add(collar);
+const neck = shadowed(new THREE.Mesh(new THREE.SphereGeometry(0.16, 32, 16), matDark));
+neck.position.y = 2.58;
+fan.add(neck);
+
+// Head group (yaws for oscillation)
+const headGroup = new THREE.Group();
+headGroup.position.y = 2.78;
+fan.add(headGroup);
+
+// Motor housing: capsule along Z
+const housing = shadowed(new THREE.Mesh(new THREE.CapsuleGeometry(0.32, 0.6, 8, 24), matHousing));
+housing.rotation.x = Math.PI / 2;
+headGroup.add(housing);
+const rearCap = shadowed(new THREE.Mesh(new THREE.SphereGeometry(0.2, 24, 16), matDark));
+rearCap.position.z = -0.55;
+headGroup.add(rearCap);
+// neck arm connecting pole to housing
+const arm = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 0.35, 24), matDark));
+arm.position.y = -0.22;
+headGroup.add(arm);
+
+// Rotor + grill share one cage center so blades sit inside the cage.
+// The fan's forward axis is local +Z; blades spin around Z.
+const CAGE_Z = 0.85;
+const rotorGroup = new THREE.Group();
+rotorGroup.position.set(0, 0, CAGE_Z);
+headGroup.add(rotorGroup);
+// motor shaft bridging housing front to rotor (keeps blades off the housing)
+const shaft = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.3, 20), matPole));
+shaft.rotation.x = Math.PI / 2;
+shaft.position.set(0, 0, CAGE_Z - 0.15);
+headGroup.add(shaft);
+
+const hub = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.15, 0.18, 32), matDark));
+hub.rotation.x = Math.PI / 2;
+rotorGroup.add(hub);
+const nose = shadowed(new THREE.Mesh(new THREE.SphereGeometry(0.13, 32, 16), matPole));
+nose.position.z = 0.12;
+nose.scale.z = 0.8;
+rotorGroup.add(nose);
+
+// 5 curved blades
+function makeBladeGeometry() {
+  const s = new THREE.Shape();
+  s.moveTo(0, 0);
+  s.bezierCurveTo(0.18, 0.04, 0.52, 0.12, 0.82, 0.42);
+  s.bezierCurveTo(0.95, 0.60, 0.82, 0.84, 0.56, 0.80);
+  s.bezierCurveTo(0.30, 0.75, 0.05, 0.42, 0, 0);
+  const g = new THREE.ExtrudeGeometry(s, { depth: 0.02, bevelEnabled: true, bevelThickness: 0.012, bevelSize: 0.012, bevelSegments: 2, curveSegments: 24 });
+  g.translate(0.14, 0, -0.01);
+  g.computeBoundingSphere();
+  // Scale blades so tip radius (~0.84) stays well inside the grill inner radius (0.93/1.05)
+  g.scale(0.72, 0.72, 1);
+  g.translate(-0.04, -0.04, 0); // keep hub centered
+  return g;
+}
+const bladeGeo = makeBladeGeometry();
+const BLADE_COUNT = 5;
+for (let i = 0; i < BLADE_COUNT; i++) {
+  const pivot = new THREE.Group();
+  const blade = shadowed(new THREE.Mesh(bladeGeo, matBlade));
+  // Pitch by twisting around the radial (X) axis only, so the blade disc
+  // stays thin in Z and never swings out of the cage. Old code used
+  // rotation.y which swung tips +/-0.5 in Z, through the grill.
+  blade.rotation.set(0.45, 0, 0);
+  pivot.add(blade);
+  pivot.rotation.z = (i / BLADE_COUNT) * Math.PI * 2;
+  rotorGroup.add(pivot);
+}
+
+// Protective chrome grill: rear + front dome + rim + spokes + badge
+// Grill center is exactly the rotor center (same X/Y/Z) so blades are enclosed.
+// Blades spin in plane z=0 (local); rear grill at z<0, front grill at z>0.
+const grillGroup = new THREE.Group();
+grillGroup.position.set(0, 0, CAGE_Z);
+headGroup.add(grillGroup);
+
+function chromeRing(radius, tube, z) {
+  const m = new THREE.Mesh(new THREE.TorusGeometry(radius, tube, 10, 72), matChrome);
+  m.position.z = z;
+  m.castShadow = true;
+  grillGroup.add(m);
+  return m;
+}
+const RIM_R = 1.05;
+const REAR_Z = -0.20;
+const DOME_BASE = 0.10;
+const domeH = 0.30;
+// rear flat rings (behind blades)
+[0.2, 0.35, 0.5, 0.65, 0.8, 0.93].forEach(r => chromeRing(r, 0.011, REAR_Z));
+// front domed rings (in front of blades, apex forward)
+[0.18, 0.33, 0.48, 0.62, 0.76, 0.89].forEach(r => {
+  const z = DOME_BASE + domeH * (1 - Math.pow(r / RIM_R, 2));
+  chromeRing(r, 0.011, z);
+});
+// radial spokes: rear flat + front domed
+for (let i = 0; i < 28; i++) {
+  const a = (i / 28) * Math.PI * 2;
+  const len = RIM_R;
+  const rear = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, len, 6), matChrome);
+  rear.position.set(Math.cos(a) * len / 2, Math.sin(a) * len / 2, REAR_Z);
+  rear.rotation.z = a - Math.PI / 2;
+  grillGroup.add(rear);
+  const front = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, len, 6), matChrome);
+  // place slightly behind the dome surface so spokes don't poke through rings
+  front.position.set(Math.cos(a) * len / 2, Math.sin(a) * len / 2, DOME_BASE + 0.08);
+  front.rotation.z = a - Math.PI / 2;
+  front.rotation.y = 0.18 * Math.cos(a);
+  front.rotation.x = -0.18 * Math.sin(a);
+  grillGroup.add(front);
+}
+// outer rim at blade plane (z=0) so blade tips clear it radially
+const outerRim = shadowed(new THREE.Mesh(new THREE.TorusGeometry(RIM_R, 0.05, 16, 80), matChrome));
+outerRim.position.z = 0;
+grillGroup.add(outerRim);
+// side band connecting rear grill to rim (blades sit inside, no overlap)
+const bandDepth = 0 - REAR_Z; // 0.20
+const band = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(RIM_R + 0.02, RIM_R + 0.02, bandDepth, 64, 1, true), matChrome));
+band.rotation.x = Math.PI / 2;
+band.position.z = REAR_Z + bandDepth / 2;
+band.material = matChrome.clone();
+band.material.side = THREE.DoubleSide;
+grillGroup.add(band);
+// center badge (front apex, well clear of nose)
+const badge = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.06, 32), matChrome);
+badge.rotation.x = Math.PI / 2;
+badge.position.z = DOME_BASE + domeH;
+grillGroup.add(badge);
+const badgeDot = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.065, 24),
+  new THREE.MeshStandardMaterial({ color: 0x0ea5e9, emissive: 0x0ea5e9, emissiveIntensity: 0.8 }));
+badgeDot.rotation.x = Math.PI / 2;
+badgeDot.position.z = DOME_BASE + domeH;
+grillGroup.add(badgeDot);
+
+// ---------- control panel on housing with 3 buttons ----------
+const panelBox = shadowed(new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.1, 0.34), matDark));
+panelBox.position.set(0, 0.36, -0.1);
+headGroup.add(panelBox);
+
+const clickables = [];
+function makeButton(x, color, action, label) {
+  const g = new THREE.Group();
+  g.position.set(x, 0.42, -0.1);
+  const btn = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.062, 0.07, 0.06, 24),
+    new THREE.MeshStandardMaterial({ color, roughness: 0.35, metalness: 0.2, emissive: color, emissiveIntensity: 0.15 })
+  );
+  btn.position.y = 0.03;
+  btn.castShadow = true;
+  btn.userData = { action, label, baseY: 0.03 };
+  g.add(btn);
+  headGroup.add(g);
+  clickables.push(btn);
+  return btn;
+}
+const btnPower = makeButton(-0.16, 0xef4444, 'power', 'Power');
+const btnSpeed = makeButton(0.0, 0x3b82f6, 'speed', 'Speed');
+const btnOsc   = makeButton(0.16, 0x22c55e, 'osc', 'Oscillation');
+
+// Power LED
+const powerLedMat = new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0xef4444, emissiveIntensity: 2 });
+const powerLed = new THREE.Mesh(new THREE.SphereGeometry(0.028, 16, 12), powerLedMat);
+powerLed.position.set(-0.16, 0.415, 0.09);
+headGroup.add(powerLed);
+// Osc LED
+const oscLedMat = new THREE.MeshStandardMaterial({ color: 0x22c55e, emissive: 0x111111, emissiveIntensity: 0.4 });
+const oscLed = new THREE.Mesh(new THREE.SphereGeometry(0.028, 16, 12), oscLedMat);
+oscLed.position.set(0.16, 0.415, 0.09);
+headGroup.add(oscLed);
+// Speed LEDs (4 levels)
+const speedLedMats = [];
+for (let i = 0; i < 4; i++) {
+  const m = new THREE.MeshStandardMaterial({
+    color: 0x3b82f6, emissive: i === 0 ? 0x3b82f6 : 0x111111,
+    emissiveIntensity: i === 0 ? 2 : 0.25
+  });
+  const led = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.02, 0.035), m);
+  led.position.set(-0.06 + i * 0.04, 0.415, 0.09);
+  headGroup.add(led);
+  speedLedMats.push(m);
+}
+
+// ---------- state + logic ----------
+const SPEEDS = [6, 12, 20, 32]; // rad/s for levels 1..4
+let powerOn = false;
+let speedLevel = 1;
+let oscOn = false;
+let bladeVel = 0; // current smoothed velocity
+
+const vPower = document.getElementById('v-power');
+const vSpeed = document.getElementById('v-speed');
+const vOsc = document.getElementById('v-osc');
+const chipPower = document.getElementById('chip-power');
+
+function refreshUI() {
+  vPower.textContent = powerOn ? 'ON' : 'OFF';
+  chipPower.className = 'chip ' + (powerOn ? 'on' : 'off');
+  vSpeed.textContent = String(speedLevel);
+  vOsc.textContent = oscOn ? 'ON' : 'OFF';
+  powerLedMat.emissive.set(powerOn ? 0x22c55e : 0xef4444);
+  powerLedMat.color.set(powerOn ? 0x22c55e : 0xef4444);
+  baseRingMat.emissive.set(powerOn ? 0x22c55e : 0xef4444);
+  oscLedMat.emissive.set(oscOn ? 0x22c55e : 0x111111);
+  oscLedMat.emissiveIntensity = oscOn ? 2 : 0.4;
+  speedLedMats.forEach((m, i) => {
+    const active = i < speedLevel;
+    m.emissive.set(active ? 0x3b82f6 : 0x111111);
+    m.emissiveIntensity = active ? 2 : 0.25;
+  });
+}
+function pressAnim(btn) {
+  btn.position.y = btn.userData.baseY - 0.025;
+  setTimeout(() => { btn.position.y = btn.userData.baseY; }, 120);
+}
+function doPower() { powerOn = !powerOn; pressAnim(btnPower); refreshUI(); }
+function doSpeed() { speedLevel = speedLevel % 4 + 1; pressAnim(btnSpeed); refreshUI(); }
+function doOsc() { oscOn = !oscOn; pressAnim(btnOsc); refreshUI(); }
+refreshUI();
+
+document.getElementById('b-power').addEventListener('click', doPower);
+document.getElementById('b-speed').addEventListener('click', doSpeed);
+document.getElementById('b-osc').addEventListener('click', doOsc);
+
+// ---------- raycaster picking ----------
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+const tooltip = document.getElementById('tooltip');
+let downPos = null;
+
+function pick(e) {
+  const r = renderer.domElement.getBoundingClientRect();
+  pointer.x = ((e.clientX - r.left) / r.width) * 2 - 1;
+  pointer.y = -((e.clientY - r.top) / r.height) * 2 + 1;
+  raycaster.setFromCamera(pointer, camera);
+  const hits = raycaster.intersectObjects(clickables, false);
+  return hits.length ? hits[0].object : null;
+}
+renderer.domElement.addEventListener('pointermove', (e) => {
+  const hit = pick(e);
+  document.body.style.cursor = hit ? 'pointer' : 'default';
+  if (hit) {
+    tooltip.style.display = 'block';
+    tooltip.style.left = e.clientX + 'px';
+    tooltip.style.top = e.clientY + 'px';
+    tooltip.textContent = hit.userData.label + ' — click';
+  } else tooltip.style.display = 'none';
+});
+renderer.domElement.addEventListener('pointerdown', (e) => { downPos = [e.clientX, e.clientY]; });
+renderer.domElement.addEventListener('pointerup', (e) => {
+  if (!downPos) return;
+  const dx = e.clientX - downPos[0], dy = e.clientY - downPos[1];
+  downPos = null;
+  if (dx * dx + dy * dy > 25) return; // was a drag, not a click
+  const hit = pick(e);
+  if (!hit) return;
+  if (hit.userData.action === 'power') doPower();
+  else if (hit.userData.action === 'speed') doSpeed();
+  else if (hit.userData.action === 'osc') doOsc();
+});
+
+// ---------- animate ----------
+const clock = new THREE.Clock();
+const MAX_YAW = THREE.MathUtils.degToRad(45);
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.elapsedTime;
+
+  // smooth spin-up / spin-down
+  const target = powerOn ? SPEEDS[speedLevel - 1] : 0;
+  bladeVel += (target - bladeVel) * Math.min(1, dt * 1.6);
+  if (Math.abs(target - bladeVel) < 0.01) bladeVel = target;
+  rotorGroup.rotation.z -= bladeVel * dt;
+
+  // subtle vibration at high speed
+  headGroup.position.x = powerOn ? Math.sin(t * 40) * 0.002 * speedLevel : 0;
+
+  // oscillation ±45°, smooth return to center when off
+  const targetYaw = oscOn ? Math.sin(t * 0.8) * MAX_YAW : 0;
+  headGroup.rotation.y += (targetYaw - headGroup.rotation.y) * Math.min(1, dt * 3);
+
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TURBO SPIKE — High-Speed Platformer</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="wrap">
+  <div id="cabinet">
+    <div id="titlebar">
+      <span class="logo">TURBO<span>SPIKE</span></span>
+      <span class="sub">16-BIT MOMENTUM PLATFORMER</span>
+    </div>
+    <canvas id="game" width="960" height="540"></canvas>
+    <div id="overlay"></div>
+    <div id="controls">
+      <div><b>←/→ or A/D</b> move &nbsp; <b>SPACE</b> jump (hold = higher) &nbsp; <b>↓/S</b> roll &nbsp; <b>W</b> look up &nbsp; <b>R</b> restart &nbsp; <b>ESC/P</b> pause &nbsp; <b>M</b> mute</div>
+      <div class="hint">Keep running to build speed and automatically curl into a ball. Jump while moving for a speed boost. Rings protect you.</div>
+    </div>
+  </div>
+</div>
+<script src="js/audio.js"></script>
+<script src="js/level.js"></script>
+<script src="js/entities.js"></script>
+<script src="js/player.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>
